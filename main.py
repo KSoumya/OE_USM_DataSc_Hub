@@ -8,11 +8,12 @@ import sklearn
 import plotly 
 import pylab
 
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.preprocessing import LabelEncoder
+from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import confusion_matrix, mean_absolute_error, mean_squared_error, r2_score
-from sklearn.metrics import classification_report
+from sklearn.metrics import classification_report, plot_confusion_matrix, plot_precision_recall_curve
 
 header = st.container()
 dataset = st.container()
@@ -29,6 +30,8 @@ st.markdown(
 	""",
 	unsafe_allow_html = True
 	)
+
+st.set_option('deprecation.showPyplotGlobalUse', False)
 
 @st.cache
 def get_data(filename):
@@ -62,7 +65,8 @@ with dataset:
 	df2 = df_fil
 	df2['count']=range(df_fil.shape[0])
     
-    # Plot!
+    # Plot! 
+    ## Refer this link: https://seaborn.pydata.org/generated/seaborn.lineplot.html
 	fig = plt.figure(figsize=(10, 14))
 	sns.lineplot(x = "count", y = "O2 (mg/L)", hue = 'isobath', data = df2)
 	st.pyplot(fig)
@@ -79,6 +83,37 @@ with modelTraining:
 
 	sel_col, disp_col = st.columns(2)
 
+	# Feature Transformation
+	class_le = LabelEncoder()
+	y = class_le.fit_transform(df2['isobath'].values)
+	pd.value_counts(y)
+
+	# Data Preparation
+	X = df2['O2 (mg/L)']
+	X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.5, random_state=0, stratify=y)
+	X_train = X_train.values.reshape(X_train.shape[0],1)
+	X_test = X_test.values.reshape(X_test.shape[0],1)
+
+	n_neighbors = sel_col.slider('How many nearest neighbors?', min_value = 2, max_value = 10, value = 5, step = 1)
+
+	# Model Training and Evaluation
+
+    # KNN Modeling
+	knn = KNeighborsClassifier(n_neighbors=n_neighbors)
+	knn.fit(X_train, y_train)
+	y_pred = knn.predict(X_test)
+
+	knn_report = pd.DataFrame(classification_report(y_true = y_test, 
+		y_pred = y_pred, 
+		output_dict=True)).transpose()
+
+	disp_col.subheader("Accuracy of the KNN classifier is: ")
+	disp_col.write(knn.score(X_test, y_test))
+	st.subheader("Confusion Matrix of the KNN classifier is: ")
+	plot_confusion_matrix(knn, X_test, y_test)
+	st.pyplot()
+	
+	# RF Modeling
 	max_depth = sel_col.slider('Max depth of the model?', min_value = 5, max_value = 500, value = 20, step = 5)
 	n_estimators = sel_col.selectbox('Max number of trees?', options = [100, 200, 300, "No Limit"], index = 0)
 	input_feature = sel_col.text_input('Which feature should be used as the predictor?', 'DEPTH (m)')
@@ -86,22 +121,26 @@ with modelTraining:
 	sel_col.text('List of features available in this data')
 	sel_col.write(df2.columns)
 
-	# Start Model Training
 	if n_estimators == 'No Limit':
-		regr = RandomForestRegressor(max_depth = max_depth)
+		rfm = RandomForestClassifier(max_depth = max_depth)
 	else:
-		regr = RandomForestRegressor(max_depth = max_depth, n_estimators = n_estimators)
-	X = df2[['DEPTH (m)']]
-	y = df2[['O2 (mg/L)']]
+		rfm = RandomForestClassifier(max_depth = max_depth, n_estimators = n_estimators)
 
-	regr.fit(X, y)
-	prediction = regr.predict(y)
+	rfm.fit(X_train, y_train)
+	rf_pred = rfm.predict(X_test)
+	
+	rfm_report = pd.DataFrame(classification_report(y_true = y_test, 
+		y_pred = rf_pred, 
+		output_dict=True)).transpose()
 
-	disp_col.subheader("Mean Absolute Error (MAE) of the RF regressor is: ")
-	disp_col.write(mean_absolute_error(y, prediction))
+	disp_col.subheader("Accuracy of the RF classifier is: ")
+	disp_col.write(rfm.score(X_test, y_test))
+	st.subheader("Confusion Matrix of the RF classifier is: ")
+	plot_confusion_matrix(rfm, X_test, y_test)
+	st.pyplot()
 
-	disp_col.subheader("Mean Squared Error (MSE) of the RF regressor is: ")
-	disp_col.write(mean_squared_error(y, prediction))
-
-	disp_col.subheader("R squared score of the RF regressor is: ")
-	disp_col.write(r2_score(y, prediction))
+	knn_col, rf_col = st.columns(2)
+	knn_col.subheader("Classification Report of the KNN model: ")
+	knn_col.write(knn_report)
+	rf_col.subheader("Classification Report of the RF model: ")
+	rf_col.write(rfm_report)
