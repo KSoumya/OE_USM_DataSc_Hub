@@ -75,7 +75,8 @@ with dataset:
 	
 with features:
 	st.header('Depth (m) and DO (mg/L)')
-	st.text("We got only depth and DO (mg/L) info now, we'll upgrade later")
+	st.markdown('* **first feature:** We got DO (mg/L)')
+	st.markdown('* **second feature:** We got isobaths, 10 & 20m')
 
 with modelTraining:
 	st.header('RF and KNN')
